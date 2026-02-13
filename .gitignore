@@ -1,0 +1,10 @@
+**/node_modules
+**/.next
+**/target
+**/.idea
+**/.vscode
+.env
+.DS_Store
+neo4j_data
+neo4j_logs
+qdrant_storage
