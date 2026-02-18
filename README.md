@@ -7,7 +7,7 @@ A high-performance hybrid search application that combines **Vector Search** (se
 - **Hybrid Search**: Leverages both Vector Embeddings (Qdrant) for semantic understanding and Graph Database (Neo4j) for structured relationships.
 - **Document Ingestion**: Parse and index documents into both vector and graph stores simultaneously.
 - **Modern UI**: specialized interface built with Next.js 16 and Tailwind CSS for seamless user experience.
-- **AI Integration**: Uses OpenAI embeddings (via Spring AI) to vectorize content.
+- **AI Integration**: Uses Google Gemini embeddings (via Spring AI) to vectorize content.
 
 ## 🏗️ Architecture
 
@@ -27,7 +27,7 @@ graph TD
     subgraph Infrastructure
         Neo4j[(Neo4j Graph DB)]
         Qdrant[(Qdrant Vector DB)]
-        OpenAI((OpenAI API))
+        Gemini((Google Gemini API))
     end
 
     Client <-->|HTTP/JSON| API
@@ -38,7 +38,7 @@ graph TD
     Ingest -->|Generate Embeddings| AI
     Search -->|Generate Query Embeddings| AI
     
-    AI <-->|HTTP| OpenAI
+    AI <-->|HTTP| Gemini
     
     Ingest -->|Store Structure| Neo4j
     Ingest -->|Store Vectors| Qdrant
@@ -53,7 +53,7 @@ graph TD
 When a user ingests a document via the `/api/ingest` endpoint:
 1.  **Receive**: The backend receives the `title` and `content`.
 2.  **Chunk**: The content is split into smaller chunks (e.g., by paragraphs).
-3.  **Embed**: `Spring AI` calls the OpenAI API to generate vector embeddings for each chunk.
+3.  **Embed**: `Spring AI` calls the Google Gemini API to generate vector embeddings for each chunk.
 4.  **Graph Storage (Neo4j)**:
     -   A `Document` node is created.
     -   `Chunk` nodes are created and linked to the document via `HAS_CHUNK` relationships.
@@ -64,7 +64,7 @@ When a user ingests a document via the `/api/ingest` endpoint:
 #### 2. Semantic Search Workflow
 When a user searches via the `/api/search` endpoint:
 1.  **Receive**: The backend receives the natural language `query`.
-2.  **Embed**: The query is converted into a vector embedding using OpenAI.
+2.  **Embed**: The query is converted into a vector embedding using Google Gemini.
 3.  **Vector Search**: The system queries **Qdrant** for the nearest neighbor chunks (Cosine Similarity).
 4.  **Retrieval**: Top-k matching chunks are retrieved.
 5.  **Response**: The content of these chunks is returned to the frontend.
@@ -74,7 +74,8 @@ When a user searches via the `/api/search` endpoint:
 
 ### Backend
 - **Framework**: Spring Boot 3.2
-- **AI Integration**: Spring AI (0.8.1)
+- **AI Integration**: Spring AI (1.0.0-M1)
+- **Model**: Google Gemini Pro / embedding-004
 - **Database (Graph)**: Neo4j (v5.15)
 - **Database (Vector)**: Qdrant
 - **Build Tool**: Maven
@@ -93,7 +94,7 @@ Ensure you have the following installed:
 - **Java 17+**
 - **Node.js 18+**
 - **Docker & Docker Compose** (for running databases)
-- **OpenAI API Key** (for generating embeddings)
+- **Google Gemini API Key** (for generating embeddings)
 
 ## ⚡ Getting Started
 
@@ -110,12 +111,12 @@ Verify containers are running:
 
 ### 2. Backend Setup
 1. Navigate to the `backend` directory.
-2. Configure your OpenAI API Key.
+2. Configure your Google Gemini API Key.
    You can export it as an environment variable:
    ```bash
-   export OPENAI_API_KEY=sk-your-api-key-here
+   export GEMINI_API_KEY=your_api_key_here
    # Windows PowerShell
-   $env:OPENAI_API_KEY="sk-your-api-key-here"
+   $env:GEMINI_API_KEY="your_api_key_here"
    ```
    *Alternatively, update `src/main/resources/application.properties` directly (not recommended for committed code).*
 
