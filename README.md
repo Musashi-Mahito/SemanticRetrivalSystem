@@ -14,37 +14,41 @@ A high-performance hybrid search application that combines **Vector Search** (se
 The system follows a microservices-style architecture with a clear separation between the Next.js frontend and Spring Boot backend.
 
 ```mermaid
-graph TD
-    User([User]) <--> Client[Frontend (Next.js)]
-    
-    subgraph Backend [Spring Boot Application]
+flowchart TD
+
+    User([User])
+    Frontend[Frontend Next.js]
+
+    subgraph Backend[Spring Boot Application]
         API[REST Controllers]
         Ingest[Ingestion Service]
         Search[Search Service]
         AI[Spring AI]
     end
-    
-    subgraph Infrastructure
+
+    subgraph Infra[Infrastructure]
         Neo4j[(Neo4j Graph DB)]
         Qdrant[(Qdrant Vector DB)]
         Gemini((Google Gemini API))
     end
 
-    Client <-->|HTTP/JSON| API
-    
+    User <--> Frontend
+
+    Frontend --> API
+
     API --> Ingest
     API --> Search
-    
-    Ingest -->|Generate Embeddings| AI
-    Search -->|Generate Query Embeddings| AI
-    
-    AI <-->|HTTP| Gemini
-    
-    Ingest -->|Store Structure| Neo4j
-    Ingest -->|Store Vectors| Qdrant
-    
-    Search -->|Similarity Search| Qdrant
-    Search -.->|Relational Lookup (Future)| Neo4j
+
+    Ingest --> AI
+    Search --> AI
+
+    AI <--> Gemini
+
+    Ingest --> Neo4j
+    Ingest --> Qdrant
+
+    Search --> Qdrant
+    Search -.-> Neo4j
 ```
 
 ### 🔄 Workflows
