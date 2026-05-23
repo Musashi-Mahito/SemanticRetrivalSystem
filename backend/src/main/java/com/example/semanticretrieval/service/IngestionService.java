@@ -26,7 +26,7 @@ public class IngestionService {
         this.documentRepository = documentRepository;
     }
 
-    @Transactional
+    @Transactional("transactionManager")
     public void ingestDocument(String title, String content) {
         // 1. Save Document Node to Neo4j
         Document doc = new Document();
