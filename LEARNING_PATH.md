@@ -38,9 +38,9 @@ The heavy lifting happens here.
 
 ### B. Spring AI
 *This is the glue between Java and AI models.*
--   **`EmbeddingClient`**: Interface for generating embeddings (uses OpenAI in this project).
+-   **`EmbeddingModel`**: Interface for generating embeddings. In this project, we implement a custom **`GeminiEmbeddingModel`** to robustly call Google Gemini's OpenAI-compatible embeddings endpoint without metadata NullPointerExceptions.
 -   **`VectorStore`**: Abstraction for interacting with vector DBs (Qdrant).
--   **`Document` & `DocumentReader`**: Spring AI's data model for text.
+-   **`Document`**: Spring AI's data model for text.
 
 ### C. Spring Data Neo4j
 -   **Object-Graph Mapping (OGM)**: Mapping Java classes (`@Node`, `@Relationship`) to graph nodes.
@@ -48,9 +48,9 @@ The heavy lifting happens here.
 -   **Cypher DSL**: Writing custom graph queries if needed.
 
 ### D. Practical Implementation Details (Seen in Code)
--   **Lombok**: Annotations like `@RequiredArgsConstructor`, `@Data` to reduce boilerplate.
+-   **Pure Java Classes (No Lombok)**: Boilerplate code like getters, setters, and constructors is implemented natively in pure Java instead of using external annotation libraries like Lombok. This provides transparent standard Java patterns for beginners and ensures 100% compatibility across all modern Java runtimes (such as Java 25+).
 -   **Microservice Logic**:
-    -   *Ingestion*: Text splitting (Chunking), generating IDs (`UUID`), saving to multiple DBs transactionally (`@Transactional`).
+    -   *Ingestion*: Text splitting (Chunking), generating IDs (`UUID`), and saving to multiple databases transactionally by specifying `@Transactional("transactionManager")` to resolve auto-wire ambiguities.
     -   *Search*: Querying Vector Store, mapping results.
 
 ---

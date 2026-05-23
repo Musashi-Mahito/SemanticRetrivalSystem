@@ -40,7 +40,7 @@ public class GeminiEmbeddingModel implements EmbeddingModel {
     public EmbeddingResponse call(EmbeddingRequest request) {
         try {
             List<String> inputs = request.getInstructions();
-            
+
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("model", modelName);
             requestBody.put("input", inputs);
@@ -63,7 +63,8 @@ public class GeminiEmbeddingModel implements EmbeddingModel {
             HttpResponse<String> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
 
             if (httpResponse.statusCode() != 200) {
-                throw new RuntimeException("Failed to get embeddings from Gemini API: Status=" + httpResponse.statusCode() + " Body=" + httpResponse.body());
+                throw new RuntimeException("Failed to get embeddings from Gemini API: Status="
+                        + httpResponse.statusCode() + " Body=" + httpResponse.body());
             }
 
             Map<String, Object> responseMap = objectMapper.readValue(httpResponse.body(), Map.class);
@@ -76,19 +77,19 @@ public class GeminiEmbeddingModel implements EmbeddingModel {
                 if (item.containsKey("index") && item.get("index") != null) {
                     index = ((Number) item.get("index")).intValue();
                 }
-                
+
                 List<Number> vectorList = (List<Number>) item.get("embedding");
-                
+
                 List<Double> doubleVector = new ArrayList<>();
                 for (Number val : vectorList) {
                     doubleVector.add(val.doubleValue());
                 }
-                
+
                 embeddings.add(new Embedding(doubleVector, index));
             }
 
             EmbeddingResponseMetadata metadata = new EmbeddingResponseMetadata();
-            
+
             return new EmbeddingResponse(embeddings, metadata);
 
         } catch (Exception e) {

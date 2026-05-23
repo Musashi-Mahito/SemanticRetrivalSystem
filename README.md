@@ -7,7 +7,7 @@ A high-performance hybrid search application that combines **Vector Search** (se
 - **Hybrid Search**: Leverages both Vector Embeddings (Qdrant) for semantic understanding and Graph Database (Neo4j) for structured relationships.
 - **Document Ingestion**: Parse and index documents into both vector and graph stores simultaneously.
 - **Modern UI**: specialized interface built with Next.js 16 and Tailwind CSS for seamless user experience.
-- **AI Integration**: Uses Google Gemini embeddings (via Spring AI) to vectorize content.
+- **AI Integration**: Uses Google Gemini embeddings (via Spring AI and a custom robust embedding bean) to vectorize content.
 
 ## 🏗️ Architecture
 
@@ -78,12 +78,12 @@ When a user searches via the `/api/search` endpoint:
 
 ### Backend
 - **Framework**: Spring Boot 3.2
-- **AI Integration**: Spring AI (1.0.0-M1)
-- **Model**: Google Gemini Pro / embedding-004
+- **AI Integration**: Spring AI (1.0.0-M1) with a custom **GeminiEmbeddingModel**
+- **Models**: Google Gemini 1.5 Flash (Chat) & gemini-embedding-001 (Embeddings)
 - **Database (Graph)**: Neo4j (v5.15)
 - **Database (Vector)**: Qdrant
 - **Build Tool**: Maven
-- **Language**: Java 17
+- **Language**: Java 17+ (Compiled and verified on Java 26+)
 
 ### Frontend
 - **Framework**: Next.js 16 (App Router)
@@ -188,3 +188,15 @@ SemanticRetrivalSystem/
 ├── docker-compose.yml       # Database orchestration
 └── README.md                # Project Documentation
 ```
+
+## 💡 Technical Notes
+
+During the integration phase, we implemented two crucial fixes for stability and compatibility with newer environments:
+
+1. **Custom `GeminiEmbeddingModel`**: 
+   Spring AI `1.0.0-M1` has a known `NullPointerException` when processing the OpenAI-compatible response metadata from Google Gemini (since Gemini does not return a token usage block in its embedding response). We implemented a custom `GeminiEmbeddingModel` bean that inherits the interface and implements robust request handling and response parsing.
+2. **Explicit Transaction Management**: 
+   Since both Neo4j and Spring Boot reactive components register transaction managers, we explicitly specified `@Transactional("transactionManager")` in the ingestion layer to avoid auto-wiring ambiguity.
+3. **Pure Java Entities**:
+   Lombok dependencies were completely refactored to standard, pure Java getters, setters, and constructors to ensure 100% compatibility with modern Java runtimes (tested up to Java 26).
+
