@@ -3,7 +3,6 @@ package com.example.semanticretrieval.service;
 import com.example.semanticretrieval.domain.Chunk;
 import com.example.semanticretrieval.domain.Document;
 import com.example.semanticretrieval.repository.DocumentRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.ai.document.DocumentReader;
 // import org.springframework.ai.embedding.EmbeddingModel; // Unused
 import org.springframework.ai.vectorstore.VectorStore;
@@ -16,12 +15,16 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class IngestionService {
 
     private final VectorStore vectorStore;
     private final DocumentRepository documentRepository;
     // private final ChunkRepository chunkRepository; // Unused
+
+    public IngestionService(VectorStore vectorStore, DocumentRepository documentRepository) {
+        this.vectorStore = vectorStore;
+        this.documentRepository = documentRepository;
+    }
 
     @Transactional
     public void ingestDocument(String title, String content) {

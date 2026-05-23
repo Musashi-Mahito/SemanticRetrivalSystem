@@ -1,6 +1,5 @@
 package com.example.semanticretrieval.service;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
@@ -9,10 +8,13 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class SearchService {
 
     private final VectorStore vectorStore;
+
+    public SearchService(VectorStore vectorStore) {
+        this.vectorStore = vectorStore;
+    }
 
     public List<String> search(String query) {
         // 1. Vector Search
