@@ -25,9 +25,10 @@ export default function Home() {
         params: { query },
       });
       setResults(response.data);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to fetch results. Is the backend running?");
+      const msg = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to fetch results. Is the backend running?";
+      setError(msg);
     } finally {
       setLoading(false);
     }

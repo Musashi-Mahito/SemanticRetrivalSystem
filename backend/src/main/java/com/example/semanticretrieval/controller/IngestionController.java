@@ -23,15 +23,23 @@ public class IngestionController {
     }
 
     @PostMapping
-    public ResponseEntity<String> ingest(@RequestBody Map<String, String> payload) {
+    public ResponseEntity<?> ingest(@RequestBody Map<String, String> payload) {
         String title = payload.get("title");
         String content = payload.get("content");
         
         if (title == null || content == null) {
-            return ResponseEntity.badRequest().body("Title and content are required");
+            return ResponseEntity.badRequest().body(Map.of("error", "Title and content are required"));
         }
 
-        ingestionService.ingestDocument(title, content);
-        return ResponseEntity.ok("Document ingested successfully");
+        try {
+            ingestionService.ingestDocument(title, content);
+            return ResponseEntity.ok(Map.of("message", "Document ingested successfully"));
+        } catch (Exception e) {
+            Throwable cause = e;
+            while (cause.getCause() != null) {
+                cause = cause.getCause();
+            }
+            return ResponseEntity.status(500).body(Map.of("error", cause.getMessage()));
+        }
     }
 }
