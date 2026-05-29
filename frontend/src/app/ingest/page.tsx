@@ -4,6 +4,8 @@ import { useState } from "react";
 import axios from "axios";
 import { UploadCloud, CheckCircle, Loader2, FileText } from "lucide-react";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+ 
 export default function IngestPage() {
     const [title, setTitle] = useState("");
     const [content, setContent] = useState("");
@@ -20,7 +22,7 @@ export default function IngestPage() {
         setErrorMessage("");
  
         try {
-            await axios.post(`http://localhost:8080/api/ingest`, { title, content });
+            await axios.post(`${API_BASE_URL}/api/ingest`, { title, content });
             setStatus("success");
             setTitle("");
             setContent("");

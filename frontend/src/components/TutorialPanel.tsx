@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
  
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+ 
 interface TutorialExample {
     title: string;
     content: string;
@@ -65,7 +67,7 @@ export default function TutorialPanel() {
         setErrorMessage("");
  
         try {
-            await axios.post("http://localhost:8080/api/ingest", {
+            await axios.post(`${API_BASE_URL}/api/ingest`, {
                 title: example.title,
                 content: example.content
             });
