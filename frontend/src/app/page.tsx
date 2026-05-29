@@ -1,15 +1,43 @@
 "use client";
-
-import { useState } from "react";
+ 
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import axios from "axios";
 import { Search, Loader2, Database, Share2 } from "lucide-react";
 import clsx from "clsx";
-
-export default function Home() {
+ 
+function SearchComponent() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  
+  const searchParams = useSearchParams();
+ 
+  useEffect(() => {
+    const queryParam = searchParams.get("query");
+    if (queryParam) {
+      setQuery(queryParam);
+      const performSearch = async () => {
+        setLoading(true);
+        setError("");
+        setResults([]);
+        try {
+          const response = await axios.get(`http://localhost:8080/api/search`, {
+            params: { query: queryParam },
+          });
+          setResults(response.data);
+        } catch (err: any) {
+          console.error(err);
+          const msg = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to fetch results. Is the backend running?";
+          setError(msg);
+        } finally {
+          setLoading(false);
+        }
+      };
+      performSearch();
+    }
+  }, [searchParams]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,5 +174,17 @@ export default function Home() {
         </div>
       </div>
     </main>
+  );
+}
+ 
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+      </main>
+    }>
+      <SearchComponent />
+    </Suspense>
   );
 }
