@@ -335,7 +335,76 @@ const handleIngest = async (e: React.FormEvent) => {
 
 ---
 
-## 3. End-to-End Execution Trace
+## 3. How Neo4j and Qdrant Interact (Hybrid Mechanism & Code Flow)
+
+Neo4j and Qdrant do not communicate with each other directly at the database layer. Instead, **the Spring Boot application acts as the mediator** that links them. 
+
+The integration relies on a **correlation key** (`embeddingId` / UUID) shared between both systems:
+
+```
+                  [Raw Document Content]
+                            │
+                            ▼
+                  (1. Split into Chunks)
+                            │
+                  ┌─────────┴─────────┐
+                  ▼                   ▼
+             [Chunk Text]        [UUID Generated]
+             "Project..."        "3e5c92d0-..."
+                  │                   │
+                  ├───────────────────┤
+                  ▼                   ▼
+             [Save to Neo4j]      [Save to Qdrant]
+             Store as Node        Store with Vector
+```
+
+### A. The Ingestion Correlation Flow
+In [IngestionService.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/service/IngestionService.java):
+1. **UUID is generated:**
+   ```java
+   String vectorId = UUID.randomUUID().toString();
+   ```
+2. **Linked to Neo4j Entity:**
+   ```java
+   Chunk chunk = new Chunk();
+   chunk.setEmbeddingId(vectorId); // Graph Node Property
+   ```
+3. **Linked to Qdrant Vector Payload:**
+   ```java
+   org.springframework.ai.document.Document aiDoc = new org.springframework.ai.document.Document(text);
+   aiDoc.getMetadata().put("embedding_id", vectorId); // Metadata Payload in Vector DB
+   ```
+
+### B. The Hybrid Search & Retrieval Flow (Expansion Concept)
+By linking them via this UUID, you can implement a true **hybrid search** in [SearchService.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/service/SearchService.java) to retrieve connected graph details:
+
+```java
+public List<String> searchHybrid(String query) {
+    // 1. Ask Qdrant to find semantically matching vector points
+    List<org.springframework.ai.document.Document> vectorMatches = vectorStore
+            .similaritySearch(SearchRequest.query(query).withTopK(3));
+
+    return vectorMatches.stream()
+            .map(doc -> {
+                // 2. Extract correlation UUID from Qdrant metadata
+                String embeddingId = (String) doc.getMetadata().get("embedding_id");
+                
+                // 3. Query Neo4j to find linked graph nodes and expand context
+                Optional<Chunk> graphChunk = chunkRepository.findByEmbeddingId(embeddingId);
+                
+                if (graphChunk.isPresent()) {
+                    // Traverse relationships in the graph (e.g. parent document)
+                    return "Graph Verified Match: " + graphChunk.get().getContent();
+                }
+                return "Vector Only Match: " + doc.getContent();
+            })
+            .collect(Collectors.toList());
+}
+```
+
+---
+
+## 4. End-to-End Execution Trace
 
 ### Flow A: Ingesting "Project Hyperion"
 1. User enters: Title = `"Project Hyperion"`, Content = `"Project Hyperion was started in 2026.\n\nIt aims to build carbon-nanotube sails."`
@@ -361,3 +430,16 @@ const handleIngest = async (e: React.FormEvent) => {
    * Sends the query vector to **Qdrant** via gRPC on port `6334`.
    * **Qdrant** calculates Cosine Similarity between query vector and stored vectors, returning the top match (which matches Chunk 1 `"It aims to build carbon-nanotube sails."`).
 4. `SearchService` extracts content strings and returns them to the user via the `SearchController`.
+
+---
+
+## 5. Key Architectural Highlights for the Interview
+
+1. **Graph + Vector Hybrid Synergy**:
+   *   *Qdrant* solves the "unstructured similarity" problem: finding semantically related concepts even if they use different keywords.
+   *   *Neo4j* solves the "structured connection" problem: once a chunk is matched in Qdrant, we can use the `embeddingId` to locate the node in Neo4j, traverse its relationships (like `HAS_CHUNK`), retrieve the parent document, or fetch other associated entities (like tags, authors, or related items).
+2. **OpenAI compatibility of Google Gemini**:
+   *   Leverages the OpenAI-compatible endpoint of Google Gemini (`generativelanguage.googleapis.com/v1beta/openai/`) inside Spring AI.
+   *   Ensures that standard REST clients or Spring AI abstractions can integrate Google Gemini's embedding capability with minimal modification.
+3. **Decoupled OGM/Vector Correlation**:
+   *   By using a UUID string (`embeddingId`) in both Neo4j and the vector store's metadata, the application decouples the database transaction boundaries while preserving link integrity between structured graph records and unstructured vector indices.
