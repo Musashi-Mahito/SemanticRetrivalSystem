@@ -59,13 +59,7 @@ public class IngestionService {
             org.springframework.ai.document.Document aiDoc = new org.springframework.ai.document.Document(text);
             aiDoc.getMetadata().put("doc_title", title);
             aiDoc.getMetadata().put("chunk_index", i);
-            // We force the ID to match what we store in Neo4j (if supported by store) or
-            // store the returned ID
-            // Simple approach: Let VectorStore generate ID, or if we can set it:
-            // aiDoc.setId(vectorId); // Spring AI Document ID is usually set in constructor
-            // or setter
-            // Current Spring AI version might vary, assuming we can rely on content hashing
-            // or just simple storage for now.
+            aiDoc.getMetadata().put("embedding_id", vectorId);
 
             aiDocuments.add(aiDoc);
         }

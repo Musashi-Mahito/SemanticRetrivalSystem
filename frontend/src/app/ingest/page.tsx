@@ -9,23 +9,27 @@ export default function IngestPage() {
     const [content, setContent] = useState("");
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
-
+    const [errorMessage, setErrorMessage] = useState("");
+ 
     const handleIngest = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!title.trim() || !content.trim()) return;
-
+ 
         setLoading(true);
         setStatus("idle");
-
+        setErrorMessage("");
+ 
         try {
             await axios.post(`http://localhost:8080/api/ingest`, { title, content });
             setStatus("success");
             setTitle("");
             setContent("");
             setTimeout(() => setStatus("idle"), 3000);
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
             setStatus("error");
+            const msg = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to ingest document. Ensure backend is running.";
+            setErrorMessage(msg);
         } finally {
             setLoading(false);
         }
@@ -104,8 +108,8 @@ export default function IngestPage() {
                     )}
 
                     {status === "error" && (
-                        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-center animate-shake">
-                            Failed to ingest document. Ensure backend is running.
+                        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-center animate-shake break-words">
+                            {errorMessage}
                         </div>
                     )}
                 </form>

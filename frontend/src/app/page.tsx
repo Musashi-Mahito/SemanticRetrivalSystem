@@ -1,15 +1,209 @@
 "use client";
-
-import { useState } from "react";
+ 
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import axios from "axios";
-import { Search, Loader2, Database, Share2 } from "lucide-react";
+import { 
+  Search, 
+  Loader2, 
+  Database, 
+  Share2, 
+  Copy, 
+  Check, 
+  GitBranch, 
+  Cpu, 
+  Layers, 
+  FileText,
+  Sparkles
+} from "lucide-react";
 import clsx from "clsx";
-
-export default function Home() {
+ 
+interface SearchResultItem {
+  title: string;
+  sourceType: "graph" | "vector" | "unknown";
+  content: string;
+}
+ 
+const parseResult = (raw: string): SearchResultItem => {
+  // Pattern 1: From Document [Title]: Content
+  const graphMatch = raw.match(/^From Document \[(.*?)\]: ([\s\S]*)$/);
+  if (graphMatch) {
+    return {
+      title: graphMatch[1],
+      sourceType: "graph",
+      content: graphMatch[2]
+    };
+  }
+ 
+  // Pattern 2: From [Title] (Vector fallback): Content
+  const vectorMatch = raw.match(/^From \[(.*?)\] \(Vector fallback\): ([\s\S]*)$/);
+  if (vectorMatch) {
+    return {
+      title: vectorMatch[1],
+      sourceType: "vector",
+      content: vectorMatch[2]
+    };
+  }
+ 
+  // Fallback
+  return {
+    title: "Document Fragment",
+    sourceType: "unknown",
+    content: raw
+  };
+};
+ 
+function ResultCard({ result, index }: { result: string; index: number }) {
+  const parsed = parseResult(result);
+  const [copied, setCopied] = useState(false);
+ 
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(parsed.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy: ", err);
+    }
+  };
+ 
+  const isGraph = parsed.sourceType === "graph";
+ 
+  return (
+    <div
+      className={clsx(
+        "group relative p-6 rounded-2xl border transition-all duration-300 transform hover:-translate-y-1 shadow-lg hover:shadow-2xl animate-fade-in-up",
+        isGraph 
+          ? "bg-slate-900/30 border-slate-800 hover:border-emerald-500/30 hover:shadow-emerald-950/5"
+          : "bg-slate-900/30 border-slate-800 hover:border-cyan-500/30 hover:shadow-cyan-950/5"
+      )}
+      style={{ animationDelay: `${index * 100}ms` }}
+    >
+      {/* Background soft glow on hover */}
+      <div className={clsx(
+        "absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none blur-xl",
+        isGraph ? "bg-emerald-500/5" : "bg-cyan-500/5"
+      )} />
+ 
+      {/* Decorative vertical colored stripe */}
+      <div className={clsx(
+        "absolute left-0 top-6 bottom-6 w-1 rounded-r-md transition-opacity duration-300",
+        isGraph ? "bg-emerald-500" : "bg-cyan-500"
+      )} />
+ 
+      <div className="space-y-4 relative z-10 pl-2">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-850/60">
+          <div className="flex items-center gap-3">
+            <div className={clsx(
+              "p-2 rounded-xl border shrink-0 transition-colors",
+              isGraph 
+                ? "bg-emerald-900/30 border-emerald-900/30 text-emerald-400 group-hover:bg-emerald-900/20" 
+                : "bg-cyan-900/30 border-cyan-900/30 text-cyan-400 group-hover:bg-cyan-900/20"
+            )}>
+              <FileText className="h-4.5 w-4.5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-200 group-hover:text-white transition-colors tracking-tight text-base leading-tight">
+                {parsed.title}
+              </h3>
+              <p className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase mt-0.5">Source Document</p>
+            </div>
+          </div>
+ 
+          {/* Badge & Copy Action Container */}
+          <div className="flex items-center self-end sm:self-auto gap-2">
+            {/* Source Tag */}
+            <span className={clsx(
+              "px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 shadow-inner",
+              isGraph 
+                ? "text-emerald-400 bg-emerald-950/30 border-emerald-500/20" 
+                : "text-cyan-400 bg-cyan-950/30 border-cyan-500/20"
+            )}>
+              {isGraph ? (
+                <>
+                  <GitBranch className="h-3 w-3 animate-pulse text-emerald-400" />
+                  <span>Knowledge Graph (Neo4j)</span>
+                </>
+              ) : (
+                <>
+                  <Cpu className="h-3 w-3 animate-pulse text-cyan-400" />
+                  <span>Vector Store (Qdrant)</span>
+                </>
+              )}
+            </span>
+ 
+            {/* Copy Button */}
+            <button
+              onClick={handleCopy}
+              className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-slate-100 transition-all border border-transparent hover:border-slate-700/60"
+              title="Copy snippet"
+            >
+              {copied ? (
+                <Check className="h-4 w-4 text-green-400" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
+ 
+        {/* Content Snippet */}
+        <div className="text-slate-300 leading-relaxed text-[15px] font-medium py-1 whitespace-pre-line">
+          {parsed.content}
+        </div>
+ 
+        {/* Footer Meta */}
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 font-semibold pt-2 border-t border-slate-850">
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+            <span>Format: Semantic Chunk</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+            <span>Status: Verified</span>
+          </div>
+          <div className="flex items-center gap-1.5 ml-auto text-slate-600 text-[11px]">
+            Index: #{index + 1}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+ 
+function SearchComponent() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  
+  const searchParams = useSearchParams();
+ 
+  useEffect(() => {
+    const queryParam = searchParams.get("query");
+    if (queryParam) {
+      setQuery(queryParam);
+      const performSearch = async () => {
+        setLoading(true);
+        setError("");
+        setResults([]);
+        try {
+          const response = await axios.get(`http://localhost:8080/api/search`, {
+            params: { query: queryParam },
+          });
+          setResults(response.data);
+        } catch (err: any) {
+          console.error(err);
+          const msg = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to fetch results. Is the backend running?";
+          setError(msg);
+        } finally {
+          setLoading(false);
+        }
+      };
+      performSearch();
+    }
+  }, [searchParams]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,9 +219,10 @@ export default function Home() {
         params: { query },
       });
       setResults(response.data);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to fetch results. Is the backend running?");
+      const msg = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to fetch results. Is the backend running?";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -110,26 +305,7 @@ export default function Home() {
 
           <div className="grid gap-6">
             {results.map((result, index) => (
-              <div
-                key={index}
-                className="group p-6 bg-slate-900/40 backdrop-blur-sm border border-slate-800 rounded-2xl 
-                           hover:bg-slate-800/40 hover:border-cyan-500/30 hover:shadow-xl hover:shadow-cyan-900/10 
-                           transition-all duration-300 transform hover:-translate-y-1 animate-fade-in-up"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <div className="flex items-start gap-4">
-                  <div className="mt-1 p-3 bg-slate-800/50 rounded-xl group-hover:bg-cyan-500/10 transition-colors">
-                    <Share2 className="h-5 w-5 text-cyan-500/50 group-hover:text-cyan-400 transition-colors" />
-                  </div>
-                  <div className="space-y-3">
-                    <p className="text-slate-300 leading-relaxed text-lg">{result}</p>
-                    <div className="flex gap-3 text-xs font-medium">
-                      <span className="px-2 py-1 bg-cyan-950/30 text-cyan-300 rounded-md border border-cyan-900/30">Vector Match</span>
-                      <span className="px-2 py-1 bg-blue-950/30 text-blue-300 rounded-md border border-blue-900/30">Score: High</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <ResultCard key={index} result={result} index={index} />
             ))}
 
             {results.length === 0 && !loading && query && !error && (
@@ -145,5 +321,17 @@ export default function Home() {
         </div>
       </div>
     </main>
+  );
+}
+ 
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+      </main>
+    }>
+      <SearchComponent />
+    </Suspense>
   );
 }
