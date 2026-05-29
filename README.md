@@ -119,12 +119,12 @@ Verify containers are running:
    You can export it as an environment variable:
    ```bash
    export GEMINI_API_KEY=your_api_key_here
-   # Windows PowerShell
-   $env:GEMINI_API_KEY="your_api_key_here"
-   ```
-   *Alternatively, update `src/main/resources/application.properties` directly (not recommended for committed code).*
-
-3. Run the application:
+    # Windows PowerShell
+    $env:GEMINI_API_KEY="your_api_key_here"
+    ```
+    *Note: `application.properties` utilizes `${GEMINI_API_KEY:temporary-dummy-key}` as a fallback to prevent Spring Boot startup validation crashes when no key is exported. However, a valid key is still required for runtime embedding generation.*
+ 
+ 3. Run the application:
    ```bash
    mvn spring-boot:run
    ```
@@ -199,4 +199,12 @@ During the integration phase, we implemented two crucial fixes for stability and
    Since both Neo4j and Spring Boot reactive components register transaction managers, we explicitly specified `@Transactional("transactionManager")` in the ingestion layer to avoid auto-wiring ambiguity.
 3. **Pure Java Entities**:
    Lombok dependencies were completely refactored to standard, pure Java getters, setters, and constructors to ensure 100% compatibility with modern Java runtimes (tested up to Java 26).
+4. **Enhanced Error Propagation**:
+   Backend controllers parse nested exceptions to return the exact root cause in a structured JSON response (`{"error": "..."}`), preventing unhelpful generic 500 error pages.
+5. **Interactive Tutorial System**:
+   Implemented a floating onboarding widget (`TutorialPanel.tsx`) that explains core concepts, allows users to trigger auto-ingestion of sample texts, and runs semantic search queries with a single click.
+6. **URL Query Param Autofill**:
+   Refactored the home page to detect `?query=...` URL parameters on load, auto-populating search fields and triggering semantic search operations seamlessly.
+7. **Source-Aware Semantic Result UI**:
+   The frontend parses result strings to separate the document title from text chunks, dynamically styling the result cards based on their source (emerald styling for Neo4j Graph Matches, and cyan styling for Qdrant Vector Matches), complete with hover effects and click-to-copy utility.
 

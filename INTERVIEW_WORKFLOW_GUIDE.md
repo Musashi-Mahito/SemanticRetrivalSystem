@@ -72,10 +72,10 @@ spring.ai.vectorstore.qdrant.collection-name=documents
 
 # Point OpenAI Client to Gemini's compatibility base url
 spring.ai.openai.base-url=https://generativelanguage.googleapis.com/v1beta/openai/
-spring.ai.openai.api-key=${GEMINI_API_KEY}
+spring.ai.openai.api-key=${GEMINI_API_KEY:temporary-dummy-key}
 spring.ai.openai.embedding.options.model=gemini-embedding-001
 ```
-*   **What this does**: Directs Spring Boot to connect to the databases. Redirects the OpenAI-compatible client library to communicate directly with Google Gemini endpoints (`generativelanguage.googleapis.com`) using your `GEMINI_API_KEY`.
+*   **What this does**: Directs Spring Boot to connect to the databases. Redirects the OpenAI-compatible client library to communicate directly with Google Gemini endpoints (`generativelanguage.googleapis.com`) using your `GEMINI_API_KEY` (with a dummy key fallback on startup to prevent boot errors).
 
 ---
 
@@ -265,13 +265,31 @@ public class SearchService {
     }
 
     public List<String> search(String query) {
-        // 1. Fire semantic similarity search request against Qdrant
+        // 1. Vector Search (similarity search in Qdrant)
         List<org.springframework.ai.document.Document> similarDocuments = vectorStore
                 .similaritySearch(SearchRequest.query(query).withTopK(5));
-
-        // 2. Extract matches content strings
+ 
+        // 2. Extract content and enrich with Graph Data from Neo4j (Hybrid Search)
         return similarDocuments.stream()
-                .map(org.springframework.ai.document.Document::getContent)
+                .map(doc -> {
+                    String content = doc.getContent();
+                    String embeddingId = (String) doc.getMetadata().get("embedding_id");
+ 
+                    if (embeddingId != null) {
+                        Optional<Document> parentDocOpt = documentRepository.findByChunkEmbeddingId(embeddingId);
+                        if (parentDocOpt.isPresent()) {
+                            Document parentDoc = parentDocOpt.get();
+                            return "From Document [" + parentDoc.getTitle() + "]: " + content;
+                        }
+                    }
+ 
+                    // Fallback to vector store metadata
+                    String docTitle = (String) doc.getMetadata().get("doc_title");
+                    if (docTitle != null) {
+                        return "From [" + docTitle + "] (Vector fallback): " + content;
+                    }
+                    return content;
+                })
                 .collect(Collectors.toList());
     }
 }
@@ -285,26 +303,28 @@ public class SearchService {
 #### 8. [frontend/src/app/page.tsx](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/frontend/src/app/page.tsx)
 Handles the user interface for query execution and results rendering.
 ```typescript
-const handleSearch = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!query.trim()) return;
-
-  setLoading(true);
-  setError("");
-  setResults([]);
-
-  try {
-    // Fire GET request to Spring Boot Search API
-    const response = await axios.get(`http://localhost:8080/api/search`, {
-      params: { query },
-    });
-    setResults(response.data);
-  } catch (err) {
-    setError("Failed to fetch results. Is the backend running?");
-  } finally {
-    setLoading(false);
-  }
-};
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+ 
+    setLoading(true);
+    setError("");
+    setResults([]);
+ 
+    try {
+      // Fire GET request to Spring Boot Search API
+      const response = await axios.get(`http://localhost:8080/api/search`, {
+        params: { query },
+      });
+      setResults(response.data);
+    } catch (err: any) {
+      console.error(err);
+      const msg = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to fetch results. Is the backend running?";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 ```
 *   **What this does**: Sends requests to the Spring Boot REST endpoint and processes the returned list of text strings, rendering them within styled glassmorphic cards.
 
@@ -314,25 +334,31 @@ Handles data collection from users to feed the backend.
 const handleIngest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !content.trim()) return;
-
+ 
     setLoading(true);
     setStatus("idle");
-
+    setErrorMessage("");
+ 
     try {
         // Fire POST request to Spring Boot Ingestion API
         await axios.post(`http://localhost:8080/api/ingest`, { title, content });
         setStatus("success");
         setTitle("");
         setContent("");
-    } catch (err) {
+    } catch (err: any) {
         setStatus("error");
+        const msg = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to ingest.";
+        setErrorMessage(msg);
     } finally {
         setLoading(false);
     }
 };
 ```
-*   **What this does**: Sends document metadata (`title`) and full text body (`content`) as a JSON payload to `/api/ingest` to execute the dual-database ingestion workflow.
-
+*   **What this does**: Sends document metadata (`title`) and full text body (`content`) as a JSON payload to `/api/ingest` to execute the dual-database ingestion workflow, displaying structured error notifications in the UI on exception.
+ 
+#### 10. [TutorialPanel.tsx](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/frontend/src/components/TutorialPanel.tsx)
+Renders a step-by-step interactive sidebar tutorial that lets users learn core search pipeline concepts, trigger auto-ingestion of sample articles, and perform semantic queries with a single click.
+ 
 ---
 
 ## 3. How Neo4j and Qdrant Interact (Hybrid Mechanism & Code Flow)
