@@ -207,4 +207,44 @@ During the integration phase, we implemented two crucial fixes for stability and
    Refactored the home page to detect `?query=...` URL parameters on load, auto-populating search fields and triggering semantic search operations seamlessly.
 7. **Source-Aware Semantic Result UI**:
    The frontend parses result strings to separate the document title from text chunks, dynamically styling the result cards based on their source (emerald styling for Neo4j Graph Matches, and cyan styling for Qdrant Vector Matches), complete with hover effects and click-to-copy utility.
+ 
+ 
+## 🌐 Production Deployment (Vercel + Cloud Services)
+ 
+To host this hybrid search system in a public production environment, the frontend, backend, and databases must be decoupled and deployed to cloud environments.
+ 
+```mermaid
+flowchart LR
+    Vercel[Vercel Frontend] -->|NEXT_PUBLIC_API_URL| Railway[Railway / Render Backend]
+    Railway -->|bolt+s://| Aura[Neo4j AuraDB Cloud]
+    Railway -->|gRPC/https| Qdrant[Qdrant Cloud Vector]
+```
+ 
+### 1. Database Cloud Setup (Free Tiers Available)
+* **Neo4j Graph Database**:
+  Create a free cloud instance on [Neo4j AuraDB](https://neo4j.com/cloud/platform/auradb/). AuraDB manages the graph database instance and provides a secure connection URI starting with `neo4j+s://`.
+* **Qdrant Vector Database**:
+  Create a free cluster on [Qdrant Cloud](https://qdrant.to/cloud). Qdrant Cloud handles vector similarity indexing and exposes a host endpoint along with a cluster API key.
+ 
+### 2. Backend Cloud Deployment
+Deploy the Java Spring Boot `backend` folder to a service hosting provider (such as **Railway**, **Render**, or **Fly.io**). Configure the following environment variables in your deployment dashboard:
+* `GEMINI_API_KEY`: Your Google Gemini API Key.
+* `SPRING_NEO4J_URI`: Your Neo4j AuraDB connection URI (e.g. `neo4j+s://...`).
+* `SPRING_NEO4J_AUTHENTICATION_USERNAME`: `neo4j`
+* `SPRING_NEO4J_AUTHENTICATION_PASSWORD`: Your Neo4j AuraDB password.
+* `SPRING_AI_VECTORSTORE_QDRANT_HOST`: Your Qdrant Cloud cluster endpoint (excluding protocol and port).
+* `SPRING_AI_VECTORSTORE_QDRANT_API_KEY`: Your Qdrant Cloud API key.
+* `SPRING_AI_VECTORSTORE_QDRANT_PORT`: `6334`
+ 
+### 3. Frontend Deployment (Vercel)
+1. Commit your codebase and push it to GitHub.
+2. In [Vercel](https://vercel.com/), select **Add New Project** and import your GitHub repository.
+3. Configure the following settings:
+   * **Framework Preset**: Next.js
+   * **Root Directory**: `frontend`
+4. Expand the **Environment Variables** section and configure:
+   * **Key**: `NEXT_PUBLIC_API_URL`
+   * **Value**: The public URL of your deployed backend (e.g., `https://your-backend.railway.app`).
+5. Click **Deploy**.
+
 

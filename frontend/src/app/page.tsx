@@ -172,6 +172,8 @@ function ResultCard({ result, index }: { result: string; index: number }) {
   );
 }
  
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+ 
 function SearchComponent() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<string[]>([]);
@@ -189,7 +191,7 @@ function SearchComponent() {
         setError("");
         setResults([]);
         try {
-          const response = await axios.get(`http://localhost:8080/api/search`, {
+          const response = await axios.get(`${API_BASE_URL}/api/search`, {
             params: { query: queryParam },
           });
           setResults(response.data);
@@ -204,18 +206,18 @@ function SearchComponent() {
       performSearch();
     }
   }, [searchParams]);
-
+ 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
-
+ 
     setLoading(true);
     setError("");
     setResults([]);
-
+ 
     try {
       // Direct call to backend
-      const response = await axios.get(`http://localhost:8080/api/search`, {
+      const response = await axios.get(`${API_BASE_URL}/api/search`, {
         params: { query },
       });
       setResults(response.data);
