@@ -1,133 +1,89 @@
-# Project Workflow & Architecture Guide: Semantic Retrieval System
+# The Ultimate Technical Interview Guide: Semantic Retrieval System
 
-This guide provides a comprehensive, file-by-file, and code-by-code breakdown of the **Semantic Retrieval System**. It is structured to help you explain the architecture and execution flow in detail during an interview.
+This document is your master cheat sheet and preparation guide to cracking technical interviews based on the **Semantic Retrieval System** project. It details the system architecture, file-by-file logic, deep database structures, vector mathematics, system scaling strategies, and quick-fire Q&As.
 
 ---
 
-## 1. System Architecture & Component Overview
+## 1. The 60-Second Elevator Pitch (Tell Me About Your Project)
 
-The system is a **Hybrid RAG (Retrieval-Augmented Generation) Backend** that combines:
-1. **Vector Database (Qdrant)**: Performs semantic search on high-dimensional dense vector embeddings of text chunks.
-2. **Graph Database (Neo4j)**: Stores structured hierarchical relationships between documents and their constituent text chunks, enabling relationship traversal.
-3. **Large Language Model (Google Gemini)**: Generates text embeddings using the `gemini-embedding-001` model via OpenAI-compatible endpoints.
+> **Interviewer**: *"Can you walk me through the most recent project on your resume?"*
+>
+> **Your Answer**:
+> *"I designed and built a **Hybrid Semantic Retrieval System** that combines **Vector Similarity Search** and **Graph-structured Knowledge Networks** to solve the multi-hop reasoning limitations of standard vector search. 
+> 
+> The application uses **Next.js** on the frontend and a **Spring Boot** microservice on the backend. When a document is ingested, it is parsed and chunked. I utilized **Google Gemini (`gemini-embedding-001`)** via custom HTTP integration to generate 768-dimensional semantic embeddings. The embeddings are stored in **Qdrant** (a dedicated vector database) for fast spatial similarity lookups, while the original document structure and chunk hierarchies are stored in **Neo4j** (a graph database). 
+> 
+> The core technical highlight is a **decoupled dual-persistence pipeline**: both databases are synchronized using a shared correlation UUID. During retrieval, we perform a vector search in Qdrant to find relevant concepts, extract the UUID, and immediately query Neo4j using custom **Cypher** queries to traverse parent documents and associated graph structures. This hybrid architecture serves as the robust retrieval engine necessary to support advanced Retrieval-Augmented Generation (RAG) pipelines without keyword matching bottlenecks."*
 
+---
+
+## 2. System Architecture & Tech Stack Justifications
+
+### System Flow Diagram
 ```mermaid
 graph TD
-    Client[Next.js Client] -->|HTTP POST /api/ingest| IngestController[Ingestion Controller]
-    Client -->|HTTP GET /api/search| SearchController[Search Controller]
+    Client[Next.js Client] -->|1. HTTP POST /api/ingest| IngestController[Ingestion Controller]
+    Client -->|4. HTTP GET /api/search?query=...| SearchController[Search Controller]
     
     IngestController -->|Delegates| IngestionService[Ingestion Service]
     SearchController -->|Delegates| SearchService[Search Service]
     
-    IngestionService -->|Saves Document & Chunk Nodes| Neo4jRepository[Neo4j Repositories]
-    IngestionService -->|Calls call/embed| GeminiModel[Gemini Embedding Model]
-    IngestionService -->|Saves Vectors| QdrantStore[Qdrant Vector Store]
-    
-    SearchService -->|Vector Query| QdrantStore
+    IngestionService -->|2a. Save Hierarchical Nodes| Neo4jRepository[Neo4j Repositories]
+    IngestionService -->|2b. Generate Embeddings| GeminiModel[Gemini Embedding Model]
     GeminiModel -->|HTTP POST /embeddings| GeminiAPI[Google Gemini API]
-```
-
----
-
-## 2. Code-by-Code & File-by-File Breakdown
-
-### A. Infrastructure & Configuration
-
-#### 1. [docker-compose.yml](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/docker-compose.yml)
-Defines the multi-container database environment.
-```yaml
-services:
-  qdrant:
-    image: qdrant/qdrant
-    container_name: qdrant
-    ports:
-      - "6333:6333" # HTTP REST API & Web Dashboard
-      - "6334:6334" # gRPC Interface (used by Spring AI Client)
-    volumes:
-      - ./qdrant_storage:/qdrant/storage:z
-...
-  neo4j:
-    image: neo4j:5.15.0
-    container_name: neo4j
-    ports:
-      - "7474:7474" # Neo4j Browser Console (HTTP)
-      - "7687:7687" # Bolt Protocol (Binary connection used by Spring)
-    environment:
-      - NEO4J_AUTH=neo4j/password
-```
-*   **What this does**: Spins up Qdrant (Vector DB) and Neo4j (Graph DB) locally. Spring Boot connects to Qdrant via gRPC (port `6334`) and Neo4j via Bolt (port `7687`).
-
-#### 2. [backend/src/main/resources/application.properties](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/resources/application.properties)
-Configures connection parameters and API settings.
-```properties
-# Connect to Neo4j
-spring.neo4j.uri=bolt://localhost:7687
-spring.neo4j.authentication.username=neo4j
-spring.neo4j.authentication.password=password
-
-# Connect to Qdrant (Spring AI Starter)
-spring.ai.vectorstore.qdrant.host=localhost
-spring.ai.vectorstore.qdrant.port=6334
-spring.ai.vectorstore.qdrant.collection-name=documents
-
-# Point OpenAI Client to Gemini's compatibility base url
-spring.ai.openai.base-url=https://generativelanguage.googleapis.com/v1beta/openai/
-spring.ai.openai.api-key=${GEMINI_API_KEY:temporary-dummy-key}
-spring.ai.openai.embedding.options.model=gemini-embedding-001
-```
-*   **What this does**: Directs Spring Boot to connect to the databases. Redirects the OpenAI-compatible client library to communicate directly with Google Gemini endpoints (`generativelanguage.googleapis.com`) using your `GEMINI_API_KEY` (with a dummy key fallback on startup to prevent boot errors).
-
----
-
-### B. Domain Models (Object-Graph Mapping in Neo4j)
-
-The database schema maps a document into a parent `Document` node connected to multiple `Chunk` nodes in Neo4j, representing hierarchical text separation.
-
-#### 3. [Document.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/domain/Document.java)
-```java
-@Node
-public class Document {
-    @Id
-    @GeneratedValue
-    private Long id;
-
-    private String title;
-    private String content;
-
-    @Relationship(type = "HAS_CHUNK", direction = Relationship.Direction.OUTGOING)
-    private List<Chunk> chunks = new ArrayList<>();
+    IngestionService -->|2c. Save Embeddings & UUID| QdrantStore[Qdrant Vector Store]
     
-    // Getters and Setters
-}
+    SearchService -->|5. Similarity Query| QdrantStore
+    SearchService -->|6. Retrieve Correlation UUID| QdrantStore
+    SearchService -->|7. Fetch Context & Parent Doc| Neo4jRepository
+    SearchService -->|8. Formulate Hybrid Response| SearchController
 ```
-*   **What this does**: Declares the `@Node` representation in Neo4j. Outlines the relationship: a Document has outgoing `HAS_CHUNK` edges to a collection of `Chunk` nodes.
 
-#### 4. [Chunk.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/domain/Chunk.java)
-```java
-@Node
-public class Chunk {
-    @Id
-    @GeneratedValue
-    private Long id;
+### Tech Stack Decisions: Why This Architecture?
 
-    private String content;
-    private int index;
-    private String embeddingId; // Correlation key matching Qdrant
-    
-    // Getters and Setters
-}
-```
-*   **What this does**: Represents a text fragment. Crucially, `embeddingId` holds a UUID generated during ingestion. This ID is shared between Neo4j and Qdrant, acting as the bridge linking the graph node with the corresponding vector index.
+An interviewer will test your ability to make technical trade-offs. Be prepared to explain:
+
+#### 1. Why a Hybrid System (Vector + Graph) instead of Pure Vector Search?
+*   **The Problem with Pure Vector Search (Dense Retrieval)**: Vector embeddings map semantic meaning, but they fail at relational reasoning. If Document A says *"Dr. Aris Thorne created the Hyperion engine"* and Document B says *"Dr. Aris Thorne patented a room-temperature superconductor"*, a query like *"What did the creator of Hyperion patent?"* fails in pure vector search. The term "Hyperion" has low semantic similarity to "superconductor."
+*   **The Hybrid Solution**: Vector search finds the entry point (Document A), identifies the entity (`Dr. Aris Thorne`), and the Knowledge Graph traverses the relationship: `[Hyperion] -> (CREATED_BY) -> [Thorne] -> (PATENTED) -> [Superconductor]`.
+
+#### 2. Why Qdrant and Neo4j separately instead of Postgres with pgvector?
+*   **Qdrant** is a dedicated Rust-based vector database. It supports advanced HNSW (Hierarchical Navigable Small World) indexing out-of-the-box, scalar quantization, and payloads filtering at millisecond speeds.
+*   **Neo4j** is a native graph database optimized for pointer-chasing and multi-hop relationship traversals (using Cypher) without heavy relational JOIN performance penalties.
+*   *Trade-off*: Using two databases increases operational overhead and requires us to manage application-level synchronization (the "dual-write" problem), whereas a unified database like Postgres (`pgvector` + relational tables) simplifies transactions but scales poorly under high-dimensional vector search volumes and deep relationship queries.
 
 ---
 
-### C. Custom Integration Layer (Gemini Embedding Generation)
+## 3. Database Schema & Object-Graph Mapping (OGM)
 
-#### 5. [GeminiEmbeddingModel.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/config/GeminiEmbeddingModel.java)
-Overrides Spring AI's auto-configuration to construct a direct, custom REST client matching Google Gemini's OpenAI-compatible JSON payload requirements.
+### Neo4j Graph Model
+We model documents hierarchically. A parent `Document` node has outgoing relations (`HAS_CHUNK`) pointing to several `Chunk` nodes.
+
+```
+(:Document {id, title, content})
+       │
+  [:HAS_CHUNK]
+       ▼
+(:Chunk {id, content, index, embeddingId})
+```
+
+#### Graph Class Mappings (Java Spring Data Neo4j)
+*   **`@Node`**: Declares that a class maps directly to a Neo4j node label.
+*   **`@Relationship`**: Configures relationship type (`HAS_CHUNK`) and direction (`OUTGOING`).
+*   **Correlation Key (`embeddingId`)**: A UUID generated during ingestion. It is stored as a node property in Neo4j and as payload metadata in Qdrant. This bridges both storage engines.
+
+---
+
+## 4. Code-by-Code Annotated Walkthrough
+
+### A. Core Configuration & Custom Gemini API Integration
+#### File: [GeminiEmbeddingModel.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/config/GeminiEmbeddingModel.java)
+
+*Why did we build this?* Spring AI's auto-configuration targets OpenAI endpoints directly. Since Google Gemini provides an OpenAI-compatible API pathway, we implemented `EmbeddingModel` and overrode the `call` method. This allows us to manually handle payload serialization, HTTP networking via Java's native `HttpClient`, and JSON mapping with Jackson `ObjectMapper`.
+
 ```java
 @Component
-@Primary
+@Primary // Marks this as the default bean for VectorStore to resolve auto-wiring conflicts
 public class GeminiEmbeddingModel implements EmbeddingModel {
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
@@ -145,9 +101,11 @@ public class GeminiEmbeddingModel implements EmbeddingModel {
     @Override
     public EmbeddingResponse call(EmbeddingRequest request) {
         try {
+            // Extract raw text segments to embed
             List<String> inputs = request.getInstructions();
 
-            // 1. Construct OpenAI/Gemini compatible payload
+            // Formulate standard OpenAI/Gemini JSON Request Payload:
+            // { "model": "gemini-embedding-001", "input": ["text1", "text2"] }
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("model", modelName);
             requestBody.put("input", inputs);
@@ -155,7 +113,7 @@ public class GeminiEmbeddingModel implements EmbeddingModel {
             String jsonRequest = objectMapper.writeValueAsString(requestBody);
             URI uri = URI.create(baseUrl + (baseUrl.endsWith("/") ? "" : "/") + "embeddings");
 
-            // 2. Build HTTP POST Request
+            // Construct HTTP POST request with Authorization headers
             HttpRequest httpRequest = HttpRequest.newBuilder()
                     .uri(uri)
                     .header("Content-Type", "application/json")
@@ -163,10 +121,10 @@ public class GeminiEmbeddingModel implements EmbeddingModel {
                     .POST(HttpRequest.BodyPublishers.ofString(jsonRequest))
                     .build();
 
-            // 3. Fire request to Gemini API
+            // Synchronously dispatch to Google Gemini
             HttpResponse<String> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
 
-            // 4. Parse response list of float arrays (embeddings)
+            // Parse response body containing float arrays inside the "data" structure
             Map<String, Object> responseMap = objectMapper.readValue(httpResponse.body(), Map.class);
             List<Map<String, Object>> data = (List<Map<String, Object>>) responseMap.get("data");
 
@@ -180,19 +138,22 @@ public class GeminiEmbeddingModel implements EmbeddingModel {
 
             return new EmbeddingResponse(embeddings, new EmbeddingResponseMetadata());
         } catch (Exception e) {
-            throw new RuntimeException("Error during embedding generation", e);
+            throw new RuntimeException("Error generating Gemini embedding vectors", e);
         }
     }
 }
 ```
-*   **What this does**: Intercepts request to embed text, transforms it into a standard JSON payload (`{"model": "gemini-embedding-001", "input": [...]}`), posts it to Gemini's endpoint, and parses the response vectors into Spring AI `Embedding` instances.
+
+> **Interviewer Focus Point**: *Why `@Primary`?*
+> **Answer**: *If another `EmbeddingModel` bean (like an auto-configured OpenAI model) is on the classpath, Spring's Dependency Injection container throws an `AmbiguousBeanException`. Marking our custom Gemini model as `@Primary` instructs Spring to resolve our custom implementation as the default.*
 
 ---
 
-### D. Business Logic Services (Orchestrators)
+### B. Ingestion Pipeline & Dual Database Write
+#### File: [IngestionService.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/service/IngestionService.java)
 
-#### 6. [IngestionService.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/service/IngestionService.java)
-Coordinates transaction-safe database persistence across Neo4j and Qdrant.
+This service orchestrates the step-by-step data ingestion flow, splitting the document body, binding the shared UUID (`embeddingId`), and writing to Neo4j and Qdrant.
+
 ```java
 @Service
 public class IngestionService {
@@ -205,14 +166,14 @@ public class IngestionService {
         this.documentRepository = documentRepository;
     }
 
-    @Transactional("transactionManager")
+    @Transactional("transactionManager") // Ensures relational database/graph consistency within Spring context
     public void ingestDocument(String title, String content) {
-        // 1. Create parent Document entity
+        // 1. Initialize parent document graph node
         Document doc = new Document();
         doc.setTitle(title);
         doc.setContent(content);
 
-        // 2. Perform document chunking (splits by double newline)
+        // 2. Chunking strategy: split on double newlines to segment paragraphs
         String[] textChunks = content.split("\n\n");
         List<org.springframework.ai.document.Document> aiDocuments = new ArrayList<>();
 
@@ -220,70 +181,76 @@ public class IngestionService {
             String text = textChunks[i];
             if (text.trim().isEmpty()) continue;
 
-            // 3. Create child Neo4j Chunk entity
+            // Create Neo4j Chunk entity
             Chunk chunk = new Chunk();
             chunk.setContent(text);
             chunk.setIndex(i);
 
-            // Assign unique ID for correlation between databases
+            // Generate shared correlation ID (UUID)
             String vectorId = UUID.randomUUID().toString();
             chunk.setEmbeddingId(vectorId);
 
-            // Attach chunk to Document node (creates relationship list)
+            // Attach chunk to Document node (defines HAS_CHUNK relationship)
             doc.getChunks().add(chunk);
 
-            // 4. Prepare Spring AI Document for Qdrant storage
+            // Create Spring AI Document wrapper to store in Qdrant
             org.springframework.ai.document.Document aiDoc = new org.springframework.ai.document.Document(text);
             aiDoc.getMetadata().put("doc_title", title);
             aiDoc.getMetadata().put("chunk_index", i);
-            aiDoc.getMetadata().put("embedding_id", vectorId); // Match the graph ID
+            aiDoc.getMetadata().put("embedding_id", vectorId); // Matches Neo4j property
 
             aiDocuments.add(aiDoc);
         }
 
-        // 5. Save graph nodes into Neo4j
+        // 3. Save graph structure to Neo4j
         documentRepository.save(doc);
 
-        // 6. Save text chunks and vectors into Qdrant
-        // This implicitly calls GeminiEmbeddingModel.call() to retrieve embeddings first
+        // 4. Save to Qdrant (Automatically triggers custom GeminiEmbeddingModel to get embeddings)
         vectorStore.add(aiDocuments);
     }
 }
 ```
-*   **What this does**: Orchestrates the dual-persistence flow. First splits input text into paragraph chunks, assigns UUIDs to tie Neo4j Chunks and Qdrant vectors together, persists the document-chunk tree into Neo4j, and writes the text with its generated embeddings to Qdrant.
 
-#### 7. [SearchService.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/service/SearchService.java)
-Queries the vector database for nearest semantic neighbors.
+---
+
+### C. Search & Hybrid Retrieval Pipeline
+#### File: [SearchService.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/service/SearchService.java)
+
+Retrieval maps unstructured query parameters to dense spatial vectors, executes searches in Qdrant, parses metadata properties, and performs lookups inside Neo4j.
+
 ```java
 @Service
 public class SearchService {
 
     private final VectorStore vectorStore;
+    private final DocumentRepository documentRepository;
 
-    public SearchService(VectorStore vectorStore) {
+    public SearchService(VectorStore vectorStore, DocumentRepository documentRepository) {
         this.vectorStore = vectorStore;
+        this.documentRepository = documentRepository;
     }
 
     public List<String> search(String query) {
-        // 1. Vector Search (similarity search in Qdrant)
+        // 1. Run similarity search in Qdrant (fetches top 5 matching text chunks)
         List<org.springframework.ai.document.Document> similarDocuments = vectorStore
                 .similaritySearch(SearchRequest.query(query).withTopK(5));
- 
-        // 2. Extract content and enrich with Graph Data from Neo4j (Hybrid Search)
+
+        // 2. Resolve hybrid context: query Neo4j for metadata & parental relationships
         return similarDocuments.stream()
                 .map(doc -> {
                     String content = doc.getContent();
                     String embeddingId = (String) doc.getMetadata().get("embedding_id");
- 
+
                     if (embeddingId != null) {
+                        // Graph traversal lookup using custom repository method
                         Optional<Document> parentDocOpt = documentRepository.findByChunkEmbeddingId(embeddingId);
                         if (parentDocOpt.isPresent()) {
                             Document parentDoc = parentDocOpt.get();
                             return "From Document [" + parentDoc.getTitle() + "]: " + content;
                         }
                     }
- 
-                    // Fallback to vector store metadata
+
+                    // Fallback to vector payload metadata if Neo4j query fails
                     String docTitle = (String) doc.getMetadata().get("doc_title");
                     if (docTitle != null) {
                         return "From [" + docTitle + "] (Vector fallback): " + content;
@@ -294,178 +261,203 @@ public class SearchService {
     }
 }
 ```
-*   **What this does**: Calls `vectorStore.similaritySearch(query)`. Under the hood, Spring AI embeds the query via `GeminiEmbeddingModel` and returns the top 5 closest chunks stored in Qdrant based on Cosine Similarity metrics.
 
----
-
-### E. Frontend Interaction (Next.js client-side UI)
-
-#### 8. [frontend/src/app/page.tsx](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/frontend/src/app/page.tsx)
-Handles the user interface for query execution and results rendering.
-```typescript
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
- 
-    setLoading(true);
-    setError("");
-    setResults([]);
- 
-    try {
-      // Fire GET request to Spring Boot Search API
-      const response = await axios.get(`http://localhost:8080/api/search`, {
-        params: { query },
-      });
-      setResults(response.data);
-    } catch (err: any) {
-      console.error(err);
-      const msg = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to fetch results. Is the backend running?";
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-```
-*   **What this does**: Sends requests to the Spring Boot REST endpoint and processes the returned list of text strings, rendering them within styled glassmorphic cards.
-
-#### 9. [frontend/src/app/ingest/page.tsx](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/frontend/src/app/ingest/page.tsx)
-Handles data collection from users to feed the backend.
-```typescript
-const handleIngest = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() || !content.trim()) return;
- 
-    setLoading(true);
-    setStatus("idle");
-    setErrorMessage("");
- 
-    try {
-        // Fire POST request to Spring Boot Ingestion API
-        await axios.post(`http://localhost:8080/api/ingest`, { title, content });
-        setStatus("success");
-        setTitle("");
-        setContent("");
-    } catch (err: any) {
-        setStatus("error");
-        const msg = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to ingest.";
-        setErrorMessage(msg);
-    } finally {
-        setLoading(false);
-    }
-};
-```
-*   **What this does**: Sends document metadata (`title`) and full text body (`content`) as a JSON payload to `/api/ingest` to execute the dual-database ingestion workflow, displaying structured error notifications in the UI on exception.
- 
-#### 10. [TutorialPanel.tsx](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/frontend/src/components/TutorialPanel.tsx)
-Renders a step-by-step interactive sidebar tutorial that lets users learn core search pipeline concepts, trigger auto-ingestion of sample articles, and perform semantic queries with a single click.
- 
----
-
-## 3. How Neo4j and Qdrant Interact (Hybrid Mechanism & Code Flow)
-
-Neo4j and Qdrant do not communicate with each other directly at the database layer. Instead, **the Spring Boot application acts as the mediator** that links them. 
-
-The integration relies on a **correlation key** (`embeddingId` / UUID) shared between both systems:
-
-```
-                  [Raw Document Content]
-                            │
-                            ▼
-                  (1. Split into Chunks)
-                            │
-                  ┌─────────┴─────────┐
-                  ▼                   ▼
-             [Chunk Text]        [UUID Generated]
-             "Project..."        "3e5c92d0-..."
-                  │                   │
-                  ├───────────────────┤
-                  ▼                   ▼
-             [Save to Neo4j]      [Save to Qdrant]
-             Store as Node        Store with Vector
-```
-
-### A. The Ingestion Correlation Flow
-In [IngestionService.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/service/IngestionService.java):
-1. **UUID is generated:**
-   ```java
-   String vectorId = UUID.randomUUID().toString();
-   ```
-2. **Linked to Neo4j Entity:**
-   ```java
-   Chunk chunk = new Chunk();
-   chunk.setEmbeddingId(vectorId); // Graph Node Property
-   ```
-3. **Linked to Qdrant Vector Payload:**
-   ```java
-   org.springframework.ai.document.Document aiDoc = new org.springframework.ai.document.Document(text);
-   aiDoc.getMetadata().put("embedding_id", vectorId); // Metadata Payload in Vector DB
-   ```
-
-### B. The Hybrid Search & Retrieval Flow (Expansion Concept)
-By linking them via this UUID, you can implement a true **hybrid search** in [SearchService.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/service/SearchService.java) to retrieve connected graph details:
-
+#### Custom Repository Cypher Query: [DocumentRepository.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/repository/DocumentRepository.java)
 ```java
-public List<String> searchHybrid(String query) {
-    // 1. Ask Qdrant to find semantically matching vector points
-    List<org.springframework.ai.document.Document> vectorMatches = vectorStore
-            .similaritySearch(SearchRequest.query(query).withTopK(3));
+@Repository
+public interface DocumentRepository extends Neo4jRepository<Document, Long> {
 
-    return vectorMatches.stream()
-            .map(doc -> {
-                // 2. Extract correlation UUID from Qdrant metadata
-                String embeddingId = (String) doc.getMetadata().get("embedding_id");
-                
-                // 3. Query Neo4j to find linked graph nodes and expand context
-                Optional<Chunk> graphChunk = chunkRepository.findByEmbeddingId(embeddingId);
-                
-                if (graphChunk.isPresent()) {
-                    // Traverse relationships in the graph (e.g. parent document)
-                    return "Graph Verified Match: " + graphChunk.get().getContent();
-                }
-                return "Vector Only Match: " + doc.getContent();
-            })
-            .collect(Collectors.toList());
+    @Query("MATCH (d:Document)-[:HAS_CHUNK]->(c:Chunk) WHERE c.embeddingId = $embeddingId RETURN d")
+    Optional<Document> findByChunkEmbeddingId(String embeddingId);
 }
 ```
+*   **How it works**: This Cypher statement matches the parent `Document` (`d`) connected via `HAS_CHUNK` to a target `Chunk` (`c`) where the chunk's `embeddingId` property matches the correlation key. It avoids loading all document-chunk networks into RAM, retrieving only the required node.
 
 ---
 
-## 4. End-to-End Execution Trace
+## 5. Understanding the Correlation Mechanism
 
-### Flow A: Ingesting "Project Hyperion"
-1. User enters: Title = `"Project Hyperion"`, Content = `"Project Hyperion was started in 2026.\n\nIt aims to build carbon-nanotube sails."`
-2. **React Client** POSTs to `http://localhost:8080/api/ingest` via [IngestionController.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/controller/IngestionController.java#L26).
-3. **[IngestionService.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/service/IngestionService.java#L30)**:
-   * Instantiates `Document` node.
-   * Splits into two chunks:
-     * Chunk 0: `"Project Hyperion was started in 2026."` $\rightarrow$ sets `embeddingId = "uuid-1"`.
-     * Chunk 1: `"It aims to build carbon-nanotube sails."` $\rightarrow$ sets `embeddingId = "uuid-2"`.
-   * Saves to **Neo4j** via `documentRepository.save(doc)`, creating the graph:
-     `(:Document {title: "Project Hyperion"}) -[:HAS_CHUNK]-> (:Chunk {content: "...", embeddingId: "uuid-1"})`
-   * Sends the chunks to `vectorStore.add()`.
-4. **[GeminiEmbeddingModel.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/config/GeminiEmbeddingModel.java#L40)** receives the text arrays, queries Google Gemini Embeddings endpoint, and returns two $768$-dimensional float vector arrays.
-5. **Spring AI Qdrant Starter** uploads these vector arrays to the `documents` collection in **Qdrant**, storing the vector representation along with payload details containing `embedding_id` (`uuid-1` & `uuid-2`).
+Because Neo4j (Graph DB) and Qdrant (Vector DB) are separate databases, they do not have foreign key constraints or automatic cascade transactions between them. The **Spring Boot application serves as the mediator** that links them.
+
+```
+                           +------------------------+
+                           | Ingestion Flow Initer  |
+                           +-----------+------------+
+                                       |
+                     [Raw text: "Semantic Retrieval Systems..."]
+                                       |
+                                       v
+                    1. Generate Correlation ID (UUID)
+                           "3e5c92d0-a9b8-472d"
+                                       |
+                     +-----------------+-----------------+
+                     |                                   |
+                     v                                   v
+             2a. Save to Neo4j                   2b. Save to Qdrant
+         - Node Label: :Chunk                - Point: Vector Embeddings
+         - Content: "Semantic..."            - Payload: {
+         - Property:                           "embedding_id": "3e5c92d0..."
+           "embeddingId": "3e5c92d0..."      }
+```
+
+During Search:
+1. Qdrant performs similarity search, returning the chunk text and metadata.
+2. The code extracts `embedding_id` from the Qdrant metadata payload.
+3. The code calls Neo4j: `MATCH (d:Document)-[:HAS_CHUNK]->(c:Chunk) WHERE c.embeddingId = $id RETURN d`.
+4. This binds unstructured vector similarity with rich, structured relational knowledge graphs.
 
 ---
 
-### Flow B: Searching "How will Hyperion sail?"
-1. User enters: `"How will Hyperion sail?"` into search.
-2. **React Client** queries `http://localhost:8080/api/search?query=How will Hyperion sail?`.
-3. **[SearchService.java](file:///Users/prathmesh/Desktop/Projects/SemanticRetrivalSystem/backend/src/main/java/com/example/semanticretrieval/service/SearchService.java#L19)** initiates vector search:
-   * Requests query embedding from `GeminiEmbeddingModel`.
-   * Sends the query vector to **Qdrant** via gRPC on port `6334`.
-   * **Qdrant** calculates Cosine Similarity between query vector and stored vectors, returning the top match (which matches Chunk 1 `"It aims to build carbon-nanotube sails."`).
-4. `SearchService` extracts content strings and returns them to the user via the `SearchController`.
+## 6. Vector Search & Embedding Theory
+
+### The Math of Similarity Metrics
+
+When an embedding model generates vectors, they are positioned inside a high-dimensional vector space. The proximity between vectors is measured using three mathematical equations:
+
+#### 1. Cosine Similarity
+Measures the cosine of the angle between two multi-dimensional vectors. It evaluates directional similarity rather than magnitude.
+$$\text{Similarity}(A, B) = \cos(\theta) = \frac{A \cdot B}{\|A\| \|B\|} = \frac{\sum_{i=1}^{n} A_i B_i}{\sqrt{\sum_{i=1}^{n} A_i^2} \sqrt{\sum_{i=1}^{n} B_i^2}}$$
+*   **Scale**: -1 to +1 (or 0 to 1 for non-negative indices).
+*   **Why use it**: Ideal when document lengths vary. A short sentence and a long paragraph discussing the same topic will align in direction, giving a high cosine score even if the magnitudes differ.
+
+#### 2. Dot Product (Inner Product)
+Multiplies corresponding elements of two vectors and sums them up.
+$$\text{Dot Product}(A, B) = A \cdot B = \sum_{i=1}^{n} A_i B_i$$
+*   **Why use it**: Extremely fast to calculate.
+*   **Note**: If vectors are **normalized** (length/magnitude is 1.0), Cosine Similarity is equivalent to the Dot Product. **Google Gemini embedding vectors are normalized**, making Dot Product the optimal metric.
+
+#### 3. Euclidean Distance ($L_2$ Distance)
+Measures the straight-line distance between two points in Euclidean space.
+$$d(A, B) = \sqrt{\sum_{i=1}^{n} (A_i - B_i)^2}$$
+*   **Scale**: 0 to infinity (where lower values mean closer similarity).
+*   **Why use it**: Ideal when absolute vector length contains meaning (e.g. classification tasks). Not preferred for text retrieval because different document lengths distort distance scores.
 
 ---
 
-## 5. Key Architectural Highlights for the Interview
+### Chunking Strategies: Visualized & Compared
 
-1. **Graph + Vector Hybrid Synergy**:
-   *   *Qdrant* solves the "unstructured similarity" problem: finding semantically related concepts even if they use different keywords.
-   *   *Neo4j* solves the "structured connection" problem: once a chunk is matched in Qdrant, we can use the `embeddingId` to locate the node in Neo4j, traverse its relationships (like `HAS_CHUNK`), retrieve the parent document, or fetch other associated entities (like tags, authors, or related items).
-2. **OpenAI compatibility of Google Gemini**:
-   *   Leverages the OpenAI-compatible endpoint of Google Gemini (`generativelanguage.googleapis.com/v1beta/openai/`) inside Spring AI.
-   *   Ensures that standard REST clients or Spring AI abstractions can integrate Google Gemini's embedding capability with minimal modification.
-3. **Decoupled OGM/Vector Correlation**:
-   *   By using a UUID string (`embeddingId`) in both Neo4j and the vector store's metadata, the application decouples the database transaction boundaries while preserving link integrity between structured graph records and unstructured vector indices.
+Choosing how to split document files dictates the quality of downstream vector indexing:
+
+| Chunking Strategy | Description | Pros | Cons |
+| :--- | :--- | :--- | :--- |
+| **Paragraph Splitting (`\n\n`)** | Splits text on natural double newlines. (Used in this project) | Maintains complete paragraphs; retains contextual unity. | Paragraph size is arbitrary; can exceed LLM context size or be too small. |
+| **Fixed-Size (Character/Token)** | Splits text into exact windows (e.g., 500 characters). | Predictable sizing; standard memory boundaries. | Can split sentences or words in half, losing semantic meaning. |
+| **Sliding Window (Overlap)** | Splits into fixed windows but overlaps blocks (e.g., 500 char size, 100 char overlap). | Preserves context across chunk boundaries. | Redundant data stored in vector DB; higher storage footprint. |
+| **Semantic Chunking** | Uses an LLM or semantic variance calculations to split when the topic shifts. | High search precision; keeps coherent thoughts together. | High computing overhead during ingestion. |
+
+---
+
+## 7. System Design & Scale Interview Questions
+
+These are advanced scenario questions designed to test your system design expertise.
+
+### Q1: The Dual-Write Problem
+> **Interviewer**: *"What happens if Neo4j succeeds but Qdrant fails during document ingestion? How do you keep the databases consistent?"*
+
+*   **The Problem**: Our service performs two writes. If Qdrant experiences a network failure after Neo4j writes, we get a dangling Neo4j node that has no corresponding vector index. Spring's standard `@Transactional` database wrapper cannot roll back Qdrant (which doesn't support ACID transactions in sync with Java).
+*   **The Solutions**:
+    1.  **Transactional Outbox Pattern**: Instead of writing to Neo4j and Qdrant directly, write the document and a pending task event to a relational outbox table in Neo4j (or a shared DB) within an ACID transaction. A background scheduler (like Spring Integration or Debezium CDC) reads this table, pushes the vector task to a message broker, updates Qdrant, and marks the task as completed.
+    2.  **Compensation / Retry Blocks**: Wrap the `vectorStore.add` call in a retry logic loop. If Qdrant fails permanently after retrying, trigger a compensatory write that deletes the parent document and chunk records from Neo4j, logging a structured rollback event.
+
+---
+
+### Q2: Scaling Ingestion to 1,000,000 Documents Daily
+> **Interviewer**: *"How would you redesign this architecture to support ingesting one million documents per day?"*
+
+*   **Redesign Elements**:
+    1.  **Asynchronous Ingestion with Message Queues (Kafka/RabbitMQ)**:
+        *   The web controller doesn't call `IngestionService` synchronously. Instead, it places the ingestion payload into a **Kafka** topic (`document-ingest`).
+        *   Worker pools consume messages from Kafka, preventing backend web servers from running out of thread pools.
+    2.  **Batching Vector API Requests**:
+        *   Instead of calling Gemini API to embed chunks one-by-one, batch texts together (e.g., 100 chunks per request) to reduce network roundtrips and avoid rate limits.
+    3.  **Qdrant Index Optimization**:
+        *   Set Qdrant indexing to build asynchronously. During heavy ingestion, disable HNSW index building, stream all vectors into Qdrant, and enable HNSW rebuilding afterward.
+        *   Use scalar quantization to compress 32-bit floating-point vectors to 8-bit integers, reducing RAM consumption by 75%.
+    4.  **Clustering Databases**:
+        *   Deploy Neo4j in a Causal Clustering configuration (one leader for writes, multiple read replicas).
+        *   Scale Qdrant horizontally with multiple shards and replication factors.
+
+---
+
+### Q3: Building a True GraphRAG Engine
+> **Interviewer**: *"How would you transition this basic correlation model into a true GraphRAG search engine?"*
+
+```
+[Raw Document] -> [Gemini Extraction] -> [Entity Nodes & Triplets] -> [Neo4j Graph]
+                                                                        |
+                                                                        v
+[User Query]  -> [Vector Match in Qdrant] -> [Retrieve Entity Node] -> [Traverse Relationships]
+```
+
+*   **The Transition Plan**:
+    1.  **Entity & Relationship Extraction**:
+        *   During ingestion, feed text chunks into **Gemini 1.5 Flash** with a system prompt instructing it to extract entities (e.g., `Person`, `Technology`, `Organization`) and relationships (e.g., `INVENTED`, `EMPLOYED_BY`).
+    2.  **Graph Construction**:
+        *   Write Cypher statements to merge these entities as separate nodes and establish direct relationship edges in Neo4j, rather than just unstructured chunk paragraphs.
+    3.  **Hybrid Retrieval Strategy**:
+        *   When a user query comes in, perform vector search in Qdrant to retrieve the top matching entity nodes.
+        *   Run a Cypher traversal to pull all entity paths within 2 hops (e.g., `MATCH (e:Entity)-[r*1..2]-(connected) WHERE e.id IN $matchedIds RETURN e, r, connected`).
+        *   Format this structured subgraph as context and feed it, along with the user query, to **Gemini 1.5 Flash** to generate a highly detailed and contextual response.
+
+---
+
+## 8. Technical Q&As: Rapid-Fire Cheat Sheet
+
+### Spring Boot Backend
+1.  **What is the purpose of `@CrossOrigin` in your controllers?**
+    *   It allows cross-origin requests from `http://localhost:3000` (Next.js frontend). Without it, modern browsers block HTTP requests due to CORS (Cross-Origin Resource Sharing) security policies.
+2.  **What is `@Value` and how is it used here?**
+    *   It injects configuration properties from `application.properties` or environment variables (e.g., `${spring.ai.openai.api-key}`) directly into Java class fields at runtime.
+3.  **What is the default port for Spring Boot and how would you change it?**
+    *   Default port is `8080`. You can change it by defining `server.port=9090` in `application.properties`.
+4.  **Why use `@Transactional`?**
+    *   It configures transaction boundaries for database operations. If an exception occurs within the method, Spring rolls back database modifications, preventing partial writes.
+5.  **What is the difference between `@RestController` and `@Controller`?**
+    *   `@RestController` is a convenience annotation that combines `@Controller` and `@ResponseBody`. It ensures that handler methods automatically serialize return values directly into HTTP response bodies as JSON instead of resolving MVC views.
+
+### Neo4j & Cypher
+6.  **What is Neo4j? How does it differ from PostgreSQL?**
+    *   Neo4j is a Graph Database that stores data as Nodes, Relationships, and Properties. Postgres is a Relational Database that stores data in tables of rows and columns. Neo4j is optimized for navigating dense network relationships without using nested JOIN tables.
+7.  **What are `@Node` and `@Relationship` in Spring Data Neo4j?**
+    *   They are annotations used for Object-Graph Mapping (OGM). `@Node` maps a Java entity class to a Neo4j node label. `@Relationship` defines relationship edges between entities.
+8.  **Explain this Cypher snippet: `MATCH (d:Document)-[:HAS_CHUNK]->(c:Chunk) RETURN d`.**
+    *   It searches the database to find all nodes labeled `Document` (`d`) that have an outgoing relationship of type `HAS_CHUNK` pointing to a node labeled `Chunk` (`c`), and returns the document nodes.
+9.  **What protocol does Spring Boot use to connect to Neo4j?**
+    *   The Bolt Protocol (configured via `spring.neo4j.uri=bolt://localhost:7687`), which is Neo4j's proprietary binary protocol designed for high-performance query execution.
+10. **How does Neo4j handle unique IDs?**
+    *   We use `@GeneratedValue` on a `Long` id field to let Neo4j assign internal node IDs, while using a custom UUID string (`embeddingId`) to reference specific vector payloads.
+
+### Qdrant & Vector Store
+11. **What is Qdrant?**
+    *   An open-source vector database written in Rust. It stores dense vectors along with metadata payloads, offering fast similarity searches via a gRPC interface.
+12. **What is the default port configuration for Qdrant?**
+    *   Port `6333` is for the HTTP REST API and the web dashboard interface. Port `6334` is for gRPC connections (which our Spring AI Qdrant Starter uses).
+13. **What is an "Embedding"?**
+    *   A numerical representation of unstructured text in a continuous, high-dimensional vector space. Embeddings are generated by machine learning models to capture the semantic meaning of words or sentences.
+14. **How does similarity search work under the hood?**
+    *   The search query is embedded into a vector. The vector database calculates the similarity score (like Cosine Similarity) between the query vector and all stored vectors using spatial indices (e.g. HNSW). It then returns the points with the highest score.
+15. **What is the structure of a Qdrant Payload?**
+    *   Payloads are key-value metadata maps associated with vector points. In this project, our payload contains: `doc_title`, `chunk_index`, and `embedding_id` (the correlation UUID).
+
+### Next.js Frontend
+16. **What is the difference between client components and server components in Next.js?**
+    *   Client components (`"use client"`) are rendered on the client side, allowing you to use hooks (like `useState`, `useEffect`) and interactive event handlers. Server components are rendered on the server side, resulting in faster load times and better SEO by sending static HTML to the browser.
+17. **What is Axios? Why use it instead of the native `fetch` API?**
+    *   Axios is a promise-based HTTP client. It simplifies requests by automatically transforming JSON payloads, providing built-in timeout handling, and supporting request interceptors.
+18. **How does page routing work in Next.js?**
+    *   Next.js uses a file-system based router under the `src/app` directory. A folder (e.g. `src/app/ingest`) containing a `page.tsx` file automatically maps to the corresponding URL route (`/ingest`).
+19. **What is the purpose of `useState` hook in Next.js pages?**
+    *   It manages state local to the client-side component. For example, it tracks search queries, loading indicators, and search response datasets, updating the DOM when values change.
+20. **Why do we need a dev server (`npm run dev`)?**
+    *   It boots a local Node.js development server with hot-module replacement (HMR). When front-end source code changes, updates are instantly compiled and displayed in the browser.
+
+---
+
+## 9. Behavioral Interview Prep (The STAR Method)
+
+> **Interviewer**: *"Tell me about a difficult technical challenge you faced while developing this project, and how you overcame it."*
+
+*   **Situation**: *"While building the ingestion pipeline, I needed to integrate Google's Gemini Embedding Model with Spring AI. The standard Spring AI library did not have an out-of-the-box auto-configuration for Google's embedding model that matched our setup, resulting in schema serialization conflicts with the standard OpenAI-compatible endpoints."*
+*   **Task**: *"I had to design a custom integration layer that would intercept document text arrays, format them into JSON payloads that met Google's REST specifications, and map the return vectors back into Spring AI's internal structures so that the rest of the application could function seamlessly."*
+*   **Action**: *"I created a custom class `GeminiEmbeddingModel` implementing Spring AI's `EmbeddingModel` interface. I marked it as `@Primary` to override conflicting beans. Within it, I wrote manual mapping logic using Java's native `HttpClient` to dispatch HTTP POST requests, and used Jackson's `ObjectMapper` to parse the nested float arrays returned by Gemini. I configured the request to format payloads matching Gemini's OpenAI-compatibility endpoint (`/v1beta/openai/embeddings`)."*
+*   **Result**: *"The custom integration resolved all serialization errors, allowing us to generate 768-dimensional embeddings via Gemini and ingest them directly into Qdrant. This approach preserved the standard Spring AI `VectorStore` API contracts, leaving our downstream indexing code intact and clean."*
